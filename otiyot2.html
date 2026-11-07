@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<!-- הגדרות קלות לשינוי נמצאות בתחילת הסקריפט (CONFIG) -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>משחק האותיות</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a2e;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+        }
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        #top-bar {
+            height: 50px;
+            background: rgba(0, 0, 0, 0.4);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            z-index: 10;
+        }
+        #mic {
+            font-size: 1.4rem;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #444;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        #mic.on {
+            background: #2ecc71;
+            animation: pulse 1.4s infinite;
+        }
+        @keyframes pulse {
+            0%   { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); }
+            70%  { box-shadow: 0 0 0 12px rgba(46, 204, 113, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+        }
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #heard-container {
+            position: absolute;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            padding: 6px 22px;
+            border-radius: 20px;
+            border: 2px solid #e94560;
+            font-size: 1.3rem;
+            min-width: 160px;
+            max-width: 90%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
+            z-index: 5;
+        }
+        #start-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(26, 26, 46, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            padding: 20px;
+        }
+        .start-btn {
+            padding: 15px 40px;
+            font-size: 1.8rem;
+            background: #4ecc73;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #2e8b46;
+            font-weight: bold;
+            margin-top: 20px;
+            font-family: inherit;
+        }
+        .start-btn:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+        .level-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .level-btn {
+            padding: 10px 18px;
+            font-size: 1.2rem;
+            border-radius: 30px;
+            border: 2px solid #4ecc73;
+            background: transparent;
+            color: white;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+        }
+        .level-btn.selected {
+            background: #4ecc73;
+        }
+        #mic-status {
+            margin-top: 18px;
+            font-size: 1.1rem;
+            text-align: center;
+            max-width: 90%;
+        }
+        #mic-status.ok { color: #4ecc73; }
+        #mic-status.bad { color: #ffb347; }
+        .mic-btn {
+            margin-top: 10px;
+            padding: 10px 26px;
+            font-size: 1.2rem;
+            background: #e94560;
+            color: white;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            font-weight: bold;
+            font-family: inherit;
+            box-shadow: 0 4px 0 #a3283d;
+        }
+        .mic-btn:active { transform: translateY(3px); box-shadow: none; }
+        #debug-line {
+            display: none;
+            position: absolute;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 179, 71, 0.9);
+            color: #1a1a2e;
+            padding: 4px 14px;
+            border-radius: 12px;
+            font-size: 1rem;
+            max-width: 92%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            z-index: 6;
+        }
+        #resume-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            cursor: pointer;
+        }
+        .resume-box {
+            background: #4ecc73;
+            color: white;
+            font-size: 1.6rem;
+            font-weight: bold;
+            text-align: center;
+            padding: 25px 35px;
+            border-radius: 25px;
+            box-shadow: 0 6px 0 #2e8b46;
+            line-height: 1.6;
+        }
+        .debug-label {
+            margin-top: 15px;
+            font-size: 0.95rem;
+            color: #ccc;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .debug-label input { width: 20px; height: 20px; }
+        #warning {
+            color: #ffb347;
+            font-size: 1rem;
+            text-align: center;
+            max-width: 90%;
+            margin-top: 15px;
+            min-height: 1.2em;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="top-bar">
+        <div>ניקוד: <span id="score-val">0</span></div>
+        <div id="mic" title="מיקרופון">🎤</div>
+        <div>פסילות: <span id="lives-val">❤️❤️❤️</span></div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="debug-line"></div>
+        <div id="resume-overlay">
+            <div class="resume-box">🎤<br>לחצו כאן כדי להמשיך להקשיב</div>
+        </div>
+        <div id="heard-container">
+            <span id="heard">🎤 מקשיב...</span>
+        </div>
+    </div>
+
+    <div id="start-overlay">
+        <h1 style="color: #4ecc73; font-size: 2.5rem; text-align: center; margin-bottom: 10px;">משחק האותיות הגדול</h1>
+        <p style="font-size: 1.2rem; text-align: center; max-width: 85%;">
+            אמרו בקול את שם האות שעל הבלון לפני שהוא מגיע לקו הסכנה!
+        </p>
+        <div style="margin-top: 10px; font-size: 1.1rem;">אילו אותיות?</div>
+        <div class="level-row">
+            <button class="level-btn selected" data-level="easy" onclick="selectLevel(this)">א׳ – י׳</button>
+            <button class="level-btn" data-level="all" onclick="selectLevel(this)">כל האותיות</button>
+        </div>
+        <div id="mic-status">🎤 ממתין לאישור מיקרופון...</div>
+        <button class="mic-btn" id="mic-btn" onclick="requestMic(true)">🎤 אשר מיקרופון</button>
+        <label class="debug-label"><input type="checkbox" id="debug-toggle"> מצב בדיקה להורים: הצג מה המשחק שומע</label>
+        <button class="start-btn" onclick="startGame()">התחל משחק</button>
+        <div id="warning"></div>
+    </div>
+</div>
+
+<script>
+    // ===================== CONFIG – הגדרות =====================
+    const CONFIG = {
+        startSpawnInterval: 300,   // מרווח בין בלונים בהתחלה (פריימים, 60 = שנייה). גדול יותר = פחות בלונים
+        minSpawnInterval: 160,     // המרווח הקטן ביותר שהמשחק יגיע אליו
+        minSpeed: 0.25,            // מהירות נפילה מינימלית
+        speedRange: 0.15,          // תוספת מהירות אקראית
+        maxBalloons: 4,            // מקסימום בלונים על המסך בבת אחת
+        pointsPerHit: 10,
+        lives: 3,
+        wrongCostsLife: true       // האם אות לא נכונה מורידה לב
+    };
+
+    // ===================== האותיות ושמותיהן =====================
+    // כל וריאציה שמנוע זיהוי הדיבור עשוי לכתוב עבור שם האות
+    const LETTERS = [
+        // names = שמות "בטוחים" (יכולים גם להיחשב כטעות כשהאות לא על המסך)
+        // soft  = צורות שהמנוע כותב לפעמים, אבל הן גם מילים רגילות – נחשבות רק כתשובה נכונה
+        { l: 'א', names: ['אלף', 'אלאף', 'אלעף', 'alef', 'aleph'], soft: ['1000', 'אלפ', 'הלף', 'עלף', 'אלפים'] },
+        { l: 'ב', names: ['בית', 'בייט', 'בית׳', 'bet', 'beit'], soft: ['בת', 'בט', 'ביט', 'בייט', 'bait', 'בית'] },
+        { l: 'ג', names: ['גימל', 'גימעל', 'gimel', 'gimmel'], soft: ['גמל', 'גימלי', 'גימל'] },
+        { l: 'ד', names: ['דלת', 'דאלת', 'dalet', 'daled'], soft: ['דלט', 'דלד', 'דאלט', 'דאלד', 'דלתות'] },
+        { l: 'ה', names: ['הא', 'hey', 'hei'], soft: ['הה', 'הי', 'אה', 'היי', 'האא'] },
+        { l: 'ו', names: ['וו', 'ואו', 'vav', 'waw'], soft: ['וואו', 'ואב', 'וב', 'wow', 'וואב', 'בב'] },
+        { l: 'ז', names: ['זין', 'זיין', 'זאין', 'זאיין', 'zayin', 'zain'], soft: ['זאן', 'זן', 'זיינ', 'זאינ', 'זיון'] },
+        { l: 'ח', names: ['חית', 'het', 'chet', 'khet'], soft: ['חת', 'חיט', 'חט', 'כית', 'קית', 'חיד'] },
+        { l: 'ט', names: ['טית', 'tet'], soft: ['טת', 'טיט', 'טט', 'תית', 'טיד'] },
+        { l: 'י', names: ['יוד', 'yod', 'yud'], soft: ['יוט', 'יאד', 'יוּד', 'יוּט', 'יוד'] },
+        { l: 'כ', names: ['כף', 'כאף', 'kaf', 'kaph', 'chaf'], soft: ['חף', 'קף', 'כפ', 'קאף', 'כאפ'] },
+        { l: 'ל', names: ['למד', 'lamed'], soft: ['לאמד', 'למת', 'למט', 'לאמת', 'למדי'] },
+        { l: 'מ', names: ['מם', 'mem'], soft: ['מאם', 'מים', 'אם', 'ממ'] },
+        { l: 'נ', names: ['נון', 'nun', 'noon'], soft: ['נוּן', 'נונה', 'נום'] },
+        { l: 'ס', names: ['סמך', 'samech', 'samekh'], soft: ['סמח', 'סאמך', 'סמכ', 'סמק'] },
+        { l: 'ע', names: ['עין', 'עיין', 'ayin'], soft: ['איין', 'אין', 'עיינ', 'איינ'] },
+        { l: 'פ', names: ['פא', 'pe', 'pey'], soft: ['פה', 'פי', 'פיי', 'פאה'] },
+        { l: 'צ', names: ['צדי', 'צאדי', 'tsadi', 'tzadi'], soft: ['צדיק', 'צדיי', 'סדי', 'צאדיק', 'צדק'] },
+        { l: 'ק', names: ['קוף', 'kuf', 'qof', 'koof'], soft: ['קוּף', 'קופ', 'כוף', 'קופה'] },
+        { l: 'ר', names: ['ריש', 'resh', 'reish'], soft: ['רש', 'רייש', 'ראש', 'רישה'] },
+        { l: 'ש', names: ['שין', 'shin'], soft: ['שיין', 'סין', 'שן', 'שינה'] },
+        { l: 'ת', names: ['תו', 'תיו', 'tav', 'taf'], soft: ['תאו', 'טאו', 'תאב', 'טו', 'טאב', 'תאף'] }
+    ];
+
+    const FINALS = { 'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ' };
+    function normalize(s) {
+        return s.toLowerCase()
+            .replace(/[֑-ׇ]/g, '')            // ניקוד וטעמים
+            .replace(/[׳״'"`.,!?;:\-()*#]/g, '')        // גרש, גרשיים, פיסוק, כוכביות (המנוע מצנזר "זין" ל-"ז***")
+            .replace(/[ךםןףץ]/g, c => FINALS[c])        // אותיות סופיות
+            .trim();
+    }
+    // השוואה "לפי צליל": אותיות שנשמעות דומה הופכות לאותה אות
+    function phon(s) {
+        return normalize(s)
+            .replace(/ע/g, 'א').replace(/ה/g, 'א')
+            .replace(/[חק]/g, 'כ').replace(/ט/g, 'ת')
+            .replace(/ש/g, 'ס').replace(/ב/g, 'ו')
+            .replace(/יי/g, 'י').replace(/וו(?=.)/g, 'ו');
+    }
+    function lev(a, b) {
+        const m = a.length, n = b.length;
+        const d = Array.from({ length: m + 1 }, (_, i) => [i]);
+        for (let j = 1; j <= n; j++) d[0][j] = j;
+        for (let i = 1; i <= m; i++)
+            for (let j = 1; j <= n; j++)
+                d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        return d[m][n];
+    }
+
+    const STRICT = new Map();        // שם בטוח -> אות
+    const ALL_NAMES = {};            // אות -> כל הצורות (מנורמל)
+    const PHON_NAMES = {};           // אות -> כל הצורות (לפי צליל)
+    LETTERS.forEach(({ l, names, soft }) => {
+        const all = new Set([normalize(l)]);
+        STRICT.set(normalize(l), l);
+        names.forEach(n => { const k = normalize(n); all.add(k); if (!STRICT.has(k)) STRICT.set(k, l); });
+        soft.forEach(n => all.add(normalize(n)));
+        ALL_NAMES[l] = all;
+        PHON_NAMES[l] = [...all].map(phon);
+    });
+
+    // התאמה סלחנית – רק מול אותיות שנמצאות כרגע על המסך
+    function matchOnScreen(word, onScreen, fuzzy) {
+        const w = normalize(word);
+        if (!w) return null;
+        for (const l of onScreen) if (ALL_NAMES[l].has(w)) return l;
+        const p = phon(word);
+        for (const l of onScreen) if (PHON_NAMES[l].includes(p)) return l;
+        if (!fuzzy || p.length < 3) return null;
+        let best = null, bestD = 2, tie = false;
+        for (const l of onScreen) {
+            for (const n of PHON_NAMES[l]) {
+                if (n.length < 3) continue;
+                const dd = lev(p, n);
+                if (dd < bestD) { bestD = dd; best = l; tie = false; }
+                else if (dd === bestD && best !== l) tie = true;
+            }
+        }
+        return (best && bestD <= 1 && !tie) ? best : null;
+    }
+    // תואם לגרסאות קודמות
+    function wordToLetter(word) { return STRICT.get(normalize(word)) || null; }
+
+    // ===================== משתני משחק =====================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const heardEl = document.getElementById('heard');
+    const scoreVal = document.getElementById('score-val');
+    const livesVal = document.getElementById('lives-val');
+    const micEl = document.getElementById('mic');
+    const warningEl = document.getElementById('warning');
+
+    let width, height;
+    let score = 0;
+    let lives = CONFIG.lives;
+    let isRunning = false;
+    let level = 'easy';
+
+    let balloons = [];
+    let particles = [];
+    let floatTexts = [];
+    let spawnTimer = 0;
+    let spawnInterval = CONFIG.startSpawnInterval;
+
+    const BALLOON_COLORS = ['#3498db', '#9b59b6', '#f39c12', '#1abc9c', '#e67e22', '#fd79a8', '#00b8d4'];
+
+    function resizeCanvas() {
+        const container = document.getElementById('canvas-container');
+        const dpr = window.devicePixelRatio || 1;
+        width = container.clientWidth;
+        height = container.clientHeight;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function selectLevel(btn) {
+        document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        level = btn.dataset.level;
+    }
+
+    function letterPool() {
+        return level === 'easy' ? LETTERS.slice(0, 10) : LETTERS;
+    }
+
+    // ===================== בלון =====================
+    class Balloon {
+        constructor() {
+            const onScreen = balloons.map(b => b.letter);
+            let pool = letterPool().filter(x => !onScreen.includes(x.l));
+            if (pool.length === 0) pool = letterPool();
+            this.letter = pool[Math.floor(Math.random() * pool.length)].l;
+
+            this.r = Math.max(34, Math.min(52, Math.min(width, height) * 0.09));
+            this.rx = this.r;
+            this.ry = this.r * 1.18;
+            this.x = Math.random() * (width - this.rx * 2 - 20) + this.rx + 10;
+            this.y = -this.ry - 10;
+            this.speed = CONFIG.minSpeed + Math.random() * CONFIG.speedRange;
+            this.color = BALLOON_COLORS[Math.floor(Math.random() * BALLOON_COLORS.length)];
+            this.wobble = Math.random() * Math.PI * 2;
+            this.state = 'fly';   // fly | win | lose
+            this.popTimer = 0;
+            this.scale = 1;
+        }
+
+        update() {
+            if (this.state === 'fly') {
+                this.y += this.speed;
+                this.wobble += 0.03;
+            } else {
+                this.popTimer++;
+                this.scale = 1 + this.popTimer * 0.035;
+            }
+        }
+
+        draw() {
+            const x = this.x + (this.state === 'fly' ? Math.sin(this.wobble) * 4 : 0);
+            const y = this.y;
+            const rx = this.rx * this.scale;
+            const ry = this.ry * this.scale;
+            const color = this.state === 'win' ? '#2ecc71' : this.state === 'lose' ? '#e74c3c' : this.color;
+
+            // חוט
+            ctx.beginPath();
+            ctx.moveTo(x, y + ry + 6);
+            ctx.quadraticCurveTo(x + 8, y + ry + 22, x - 2, y + ry + 38);
+            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // קשר
+            ctx.beginPath();
+            ctx.moveTo(x - 6, y + ry + 7);
+            ctx.lineTo(x + 6, y + ry + 7);
+            ctx.lineTo(x, y + ry - 2);
+            ctx.closePath();
+            ctx.fillStyle = color;
+            ctx.fill();
+
+            // גוף הבלון
+            const grad = ctx.createRadialGradient(x - rx * 0.35, y - ry * 0.4, rx * 0.1, x, y, ry);
+            grad.addColorStop(0, 'rgba(255,255,255,0.55)');
+            grad.addColorStop(0.25, color);
+            grad.addColorStop(1, color);
+            ctx.beginPath();
+            ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+            ctx.fillStyle = grad;
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+
+            // האות
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${Math.round(this.r * 1.15 * this.scale)}px Arial, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(0,0,0,0.45)';
+            ctx.shadowBlur = 4;
+            ctx.fillText(this.letter, x, y + 2);
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    class Particle {
+        constructor(x, y, color) {
+            this.x = x;
+            this.y = y;
+            this.color = color;
+            this.radius = Math.random() * 5 + 2;
+            this.vx = (Math.random() - 0.5) * 8;
+            this.vy = (Math.random() - 0.5) * 8;
+            this.alpha = 1;
+            this.decay = Math.random() * 0.03 + 0.015;
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.vy += 0.08;
+            this.alpha -= this.decay;
+        }
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, this.alpha);
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    class FloatText {
+        constructor(x, y, text, color) {
+            this.x = x; this.y = y; this.text = text; this.color = color; this.alpha = 1;
+        }
+        update() { this.y -= 0.8; this.alpha -= 0.015; }
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, this.alpha);
+            ctx.fillStyle = this.color;
+            ctx.font = 'bold 26px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(this.text, this.x, this.y);
+            ctx.restore();
+        }
+    }
+
+    function createExplosion(x, y, isSuccess) {
+        const color = isSuccess ? '#2ecc71' : '#e74c3c';
+        for (let i = 0; i < 35; i++) particles.push(new Particle(x, y, color));
+    }
+
+    // ===================== צלילים =====================
+    let actx = null;
+    function ensureAudio() {
+        if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+        if (actx.state === 'suspended') actx.resume();
+    }
+
+    function tone(freq, start, dur, type, vol, endFreq) {
+        const o = actx.createOscillator();
+        const g = actx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, start);
+        if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, start + dur);
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(vol, start + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+        o.connect(g).connect(actx.destination);
+        o.start(start);
+        o.stop(start + dur + 0.05);
+    }
+
+    function popNoise(start) {
+        const len = Math.floor(actx.sampleRate * 0.15);
+        const buf = actx.createBuffer(1, len, actx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+        const src = actx.createBufferSource();
+        src.buffer = buf;
+        const g = actx.createGain();
+        g.gain.value = 0.5;
+        src.connect(g).connect(actx.destination);
+        src.start(start);
+    }
+
+    function playWin() {
+        if (!actx) return;
+        const t = actx.currentTime;
+        popNoise(t);
+        [523, 659, 784, 1047].forEach((f, i) => tone(f, t + 0.06 + i * 0.09, 0.28, 'triangle', 0.35));
+        tone(1319, t + 0.45, 0.4, 'sine', 0.2);
+    }
+
+    function playLose() {
+        if (!actx) return;
+        const t = actx.currentTime;
+        popNoise(t);
+        tone(392, t + 0.08, 0.3, 'sawtooth', 0.12, 370);
+        tone(330, t + 0.4, 0.3, 'sawtooth', 0.12, 311);
+        tone(262, t + 0.72, 0.6, 'sawtooth', 0.12, 180);
+    }
+
+    // ===================== זיהוי דיבור =====================
+    // כל "סשן" קולט אמירה אחת קצרה ונסגר מעצמו; מיד נפתח סשן חדש.
+    // אם הטלפון מפסיק להקשיב – המשחק מאפס לבד, ואם גם זה לא עוזר – עוצר ומבקש לגעת במסך.
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const MAX_WORDS = 3;          // משפטים ארוכים יותר (דיבור ברקע) – מתעלמים
+    let rec = null;
+    let recSession = 0;
+    let sessionHandled = false;
+    let micBlocked = false;
+    let listenPaused = false;
+    let lastRecActivity = 0;
+    let sessionStartTime = 0;
+    let quickFails = 0;
+    let watchdogStreak = 0;
+    let debugMode = false;
+    const resumeEl = document.getElementById('resume-overlay');
+    const debugEl = document.getElementById('debug-line');
+
+    function setMic(on) { micEl.classList.toggle('on', on); }
+    function showListening() {
+        if (micBlocked || listenPaused) return;
+        heardEl.innerText = '🎤 מקשיב...';
+    }
+    function showDebug(text) {
+        if (!debugMode) return;
+        debugEl.style.display = 'block';
+        debugEl.innerText = 'נשמע: ' + text;
+    }
+
+    function startRecognition() {
+        if (!SR || micBlocked || !isRunning || listenPaused || document.hidden) return;
+        recSession++;
+        const sid = recSession;
+        sessionHandled = false;
+        lastRecActivity = Date.now();
+        sessionStartTime = Date.now();
+
+        const r = new SR();
+        rec = r;
+        r.lang = 'he-IL';
+        r.continuous = false;       // אמירה אחת בכל סשן – מונע הצטברות טקסט באנדרואיד
+        r.interimResults = true;
+        r.maxAlternatives = 5;
+
+        r.onstart = () => { if (sid === recSession) { setMic(true); lastRecActivity = Date.now(); } };
+        r.onresult = (e) => {
+            if (sid !== recSession) return;
+            lastRecActivity = Date.now();
+            quickFails = 0;
+            watchdogStreak = 0;
+            for (let i = e.resultIndex; i < e.results.length; i++) {
+                handleResult(e.results[i]);
+                if (sessionHandled) break;
+            }
+        };
+        r.onerror = (e) => {
+            if (sid !== recSession) return;
+            if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+                if (micGranted) pauseListening();      // הטלפון דורש נגיעה כדי להמשיך
+                else {
+                    micBlocked = true;
+                    heardEl.innerText = '⚠️ אין גישה למיקרופון';
+                }
+            }
+        };
+        r.onend = () => {
+            if (sid !== recSession) return;
+            setMic(false);
+            if (!isRunning || micBlocked || listenPaused) return;
+            if (Date.now() - sessionStartTime < 500) quickFails++; else quickFails = 0;
+            if (quickFails >= 6) { pauseListening(); return; }
+            const delay = quickFails > 0 ? 250 * quickFails : 80;
+            setTimeout(() => { if (isRunning && sid === recSession) startRecognition(); }, delay);
+        };
+        try {
+            r.start();
+        } catch (err) {
+            setTimeout(() => { if (isRunning && sid === recSession) restartRecognition(); }, 500);
+        }
+    }
+
+    // איפוס מלא: סוגרים את הסשן הנוכחי ופותחים חדש
+    function restartRecognition() {
+        const old = rec;
+        recSession++;
+        if (old) { try { old.abort(); } catch (err) {} }
+        setMic(false);
+        setTimeout(() => { if (isRunning) startRecognition(); }, 300);
+    }
+
+    function stopRecognition() {
+        recSession++;
+        if (rec) { try { rec.abort(); } catch (err) {} }
+        setMic(false);
+    }
+
+    // עצירה זמנית: הבלונים קופאים עד שנוגעים במסך
+    function pauseListening() {
+        if (listenPaused) return;
+        listenPaused = true;
+        stopRecognition();
+        heardEl.innerText = '⏸️ ההקשבה נעצרה';
+        resumeEl.style.display = 'flex';
+    }
+    function resumeListening() {
+        ensureAudio();
+        listenPaused = false;
+        micBlocked = false;
+        quickFails = 0;
+        watchdogStreak = 0;
+        resumeEl.style.display = 'none';
+        showListening();
+        stopRecognition();
+        startRecognition();          // נקרא מתוך נגיעה – הדפדפן תמיד מאשר
+    }
+    resumeEl.addEventListener('click', resumeListening);
+
+    // שומר-ראש: אם אין שום פעילות של המיקרופון – מאפסים; אם זה חוזר שוב ושוב – מבקשים נגיעה
+    setInterval(() => {
+        if (!isRunning || listenPaused || micBlocked || !SR || document.hidden) return;
+        if (Date.now() - lastRecActivity > 7000) {
+            watchdogStreak++;
+            if (watchdogStreak >= 3) pauseListening();
+            else restartRecognition();
+        }
+    }, 2000);
+
+    // כשחוזרים לדפדפן אחרי מסך כבוי / אפליקציה אחרת – מתחילים להקשיב מחדש
+    document.addEventListener('visibilitychange', () => {
+        if (!isRunning) return;
+        if (document.hidden) stopRecognition();
+        else if (!listenPaused) restartRecognition();
+    });
+
+    function handleResult(result) {
+        if (sessionHandled) return;
+        const alts = [];
+        for (let a = 0; a < result.length; a++) alts.push(result[a].transcript.trim());
+        if (alts[0]) showDebug(alts.filter(Boolean).join('  |  '));
+
+        const onScreen = [...new Set(balloons.filter(b => b.state === 'fly').map(b => b.letter))];
+        if (onScreen.length === 0) return;
+        const isFinal = result.isFinal;
+        const toCheck = isFinal ? alts : alts.slice(0, 1);
+
+        // שלב 1: האם נאמרה אות שנמצאת על המסך? (התאמה מדויקת, כולל כל החלופות)
+        for (const t of toCheck) {
+            const words = t.split(/\s+/).filter(Boolean);
+            if (!words.length || words.length > MAX_WORDS) continue;
+            if (!isFinal && words.length > 1) continue;
+            for (const w of words) {
+                const l = matchOnScreen(w, onScreen, false);
+                if (l) return accept(l);
+            }
+        }
+        if (!isFinal) return;
+
+        // שלב 2: אות אחרת שנאמרה בבירור = טעות
+        const words0 = (alts[0] || '').split(/\s+/).filter(Boolean);
+        if (words0.length && words0.length <= MAX_WORDS) {
+            for (const w of words0) {
+                const l = STRICT.get(normalize(w));
+                if (l && !onScreen.includes(l)) return accept(l);
+            }
+        }
+
+        // שלב 3: התאמה סלחנית (מילה שדומה מאוד לשם של אות שעל המסך)
+        for (const t of alts) {
+            const words = t.split(/\s+/).filter(Boolean);
+            if (!words.length || words.length > MAX_WORDS) continue;
+            for (const w of words) {
+                const l = matchOnScreen(w, onScreen, true);
+                if (l) return accept(l);
+            }
+        }
+        // כל דבר אחר (דיבור ברקע) – מתעלמים
+    }
+
+    function accept(letter) {
+        sessionHandled = true;
+        onSpokenLetter(letter);
+    }
+
+    function onSpokenLetter(letter) {
+        if (!isRunning) return;
+        const active = balloons.filter(b => b.state === 'fly');
+        if (active.length === 0) return;
+        heardEl.innerText = 'שמעתי: ' + letter;
+        clearTimeout(window._heardTimer);
+        window._heardTimer = setTimeout(() => { if (isRunning) showListening(); }, 1500);
+
+        const match = active.filter(b => b.letter === letter).sort((a, b) => b.y - a.y)[0];
+        if (match) {
+            match.state = 'win';
+            score += CONFIG.pointsPerHit;
+            floatTexts.push(new FloatText(match.x, match.y - match.ry, '+' + CONFIG.pointsPerHit + ' כל הכבוד!', '#2ecc71'));
+            playWin();
+        } else {
+            const lowest = active.sort((a, b) => b.y - a.y)[0];
+            lowest.state = 'lose';
+            floatTexts.push(new FloatText(lowest.x, lowest.y - lowest.ry, 'זו האות ' + lowest.letter, '#ff7675'));
+            playLose();
+            if (CONFIG.wrongCostsLife) loseLife();
+        }
+        updateUI();
+    }
+
+    // בדיקה ממקלדת מחשב: הקשה על אות עברית מדמה אמירה שלה
+    window.addEventListener('keydown', (e) => {
+        if (!isRunning) return;
+        const k = FINALS[e.key] || e.key;
+        if (LETTERS.some(x => x.l === k)) onSpokenLetter(k);
+    });
+
+    micEl.addEventListener('click', () => {
+        if (isRunning) resumeListening();
+    });
+
+    // ===================== אישור מיקרופון =====================
+    let micGranted = false;
+    const micStatusEl = document.getElementById('mic-status');
+    const micBtn = document.getElementById('mic-btn');
+
+    function setMicStatus(text, cls) {
+        micStatusEl.innerText = text;
+        micStatusEl.className = cls || '';
+    }
+
+    // מבקש מהדפדפן הרשאת מיקרופון (מקפיץ את חלונית האישור)
+    async function requestMic(fromButton) {
+        if (micGranted) return true;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setMicStatus('⚠️ הדפדפן לא מאפשר מיקרופון כאן. פתחו את הקובץ ב-Chrome, או מכתובת https.', 'bad');
+            return false;
+        }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(t => t.stop());   // משחררים – זיהוי הדיבור יפתח את המיקרופון בעצמו
+            micGranted = true;
+            micBlocked = false;
+            setMicStatus('✅ המיקרופון מאושר – אפשר להתחיל!', 'ok');
+            micBtn.style.display = 'none';
+            return true;
+        } catch (err) {
+            if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+                setMicStatus('⚠️ הגישה למיקרופון נחסמה. לחצו על סמל המנעול/ההגדרות ליד הכתובת ← מיקרופון ← אפשר, ורעננו את הדף.', 'bad');
+            } else if (err.name === 'NotFoundError') {
+                setMicStatus('⚠️ לא נמצא מיקרופון במכשיר.', 'bad');
+            } else if (!fromButton) {
+                setMicStatus('🎤 לחצו על "אשר מיקרופון" כדי לאפשר גישה', '');
+            } else {
+                setMicStatus('⚠️ לא הצלחנו להפעיל את המיקרופון (' + err.name + ')', 'bad');
+            }
+            return false;
+        }
+    }
+
+    // בקשת אישור אוטומטית מיד עם פתיחת הקובץ
+    window.addEventListener('load', () => {
+        if (!SR) {
+            warningEl.innerText = 'הדפדפן הזה לא תומך בזיהוי דיבור. מומלץ לפתוח ב-Chrome (מחשב או אנדרואיד) או Safari באייפון.';
+        }
+        if (navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({ name: 'microphone' }).then(p => {
+                if (p.state === 'granted') requestMic(false);
+                else if (p.state === 'denied') setMicStatus('⚠️ הגישה למיקרופון נחסמה. לחצו על סמל המנעול/ההגדרות ליד הכתובת ← מיקרופון ← אפשר, ורעננו את הדף.', 'bad');
+                else requestMic(false);
+            }).catch(() => requestMic(false));
+        } else {
+            requestMic(false);
+        }
+    });
+
+    // ===================== מהלך המשחק =====================
+    async function startGame() {
+        ensureAudio();
+        if (!micGranted) {
+            const ok = await requestMic(true);
+            if (!ok) return;   // נשארים במסך הפתיחה עם הסבר
+        }
+        if (!SR) {
+            warningEl.innerText = 'הדפדפן הזה לא תומך בזיהוי דיבור. מומלץ לפתוח ב-Chrome (מחשב או אנדרואיד) או Safari באייפון.';
+        }
+        document.getElementById('start-overlay').style.display = 'none';
+        score = 0;
+        lives = CONFIG.lives;
+        balloons = [];
+        particles = [];
+        floatTexts = [];
+        spawnTimer = CONFIG.startSpawnInterval - 60;   // בלון ראשון אחרי שנייה
+        spawnInterval = CONFIG.startSpawnInterval;
+        micBlocked = false;
+        listenPaused = false;
+        quickFails = 0;
+        watchdogStreak = 0;
+        resumeEl.style.display = 'none';
+        debugMode = document.getElementById('debug-toggle').checked;
+        debugEl.style.display = 'none';
+        isRunning = true;
+        showListening();
+        updateUI();
+        startRecognition();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function updateUI() {
+        scoreVal.innerText = score;
+        livesVal.innerText = lives > 0 ? '❤️'.repeat(lives) : '💔';
+    }
+
+    function loseLife() {
+        lives--;
+        updateUI();
+        if (lives <= 0) setTimeout(gameOver, 700);
+    }
+
+    function gameLoop() {
+        if (!isRunning) return;
+
+        ctx.clearRect(0, 0, width, height);
+
+        // קו סכנה אדום
+        const dangerY = height - 15;
+        ctx.beginPath();
+        ctx.moveTo(0, dangerY);
+        ctx.lineTo(width, dangerY);
+        ctx.strokeStyle = '#e94560';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 6]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // יצירת בלונים חדשים
+        if (lives > 0 && !listenPaused) {
+            spawnTimer++;
+            const flying = balloons.filter(b => b.state === 'fly').length;
+            if (spawnTimer >= spawnInterval && flying < CONFIG.maxBalloons) {
+                balloons.push(new Balloon());
+                spawnTimer = 0;
+                if (spawnInterval > CONFIG.minSpawnInterval) spawnInterval -= 2;
+            }
+        }
+
+        // עדכון וציור בלונים
+        for (let i = balloons.length - 1; i >= 0; i--) {
+            const b = balloons[i];
+            if (!listenPaused || b.state !== 'fly') b.update();
+            b.draw();
+
+            if (b.state !== 'fly' && b.popTimer > 14) {
+                createExplosion(b.x, b.y, b.state === 'win');
+                balloons.splice(i, 1);
+                continue;
+            }
+
+            // חציית קו הסכנה
+            if (!listenPaused && b.state === 'fly' && b.y + b.ry >= dangerY) {
+                createExplosion(b.x, dangerY, false);
+                floatTexts.push(new FloatText(b.x, dangerY - 30, 'זו האות ' + b.letter, '#ff7675'));
+                balloons.splice(i, 1);
+                playLose();
+                loseLife();
+            }
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.update();
+            p.draw();
+            if (p.alpha <= 0) particles.splice(i, 1);
+        }
+
+        for (let i = floatTexts.length - 1; i >= 0; i--) {
+            const f = floatTexts[i];
+            f.update();
+            f.draw();
+            if (f.alpha <= 0) floatTexts.splice(i, 1);
+        }
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    function gameOver() {
+        if (!isRunning) return;
+        isRunning = false;
+        stopRecognition();
+        resumeEl.style.display = 'none';
+        const overlay = document.getElementById('start-overlay');
+        overlay.querySelector('h1').innerText = 'המשחק הסתיים!';
+        overlay.querySelector('p').innerText = `הגעתם לניקוד של ${score} נקודות. כל הכבוד!`;
+        overlay.querySelector('.start-btn').innerText = 'נסה שוב';
+        overlay.style.display = 'flex';
+    }
+</script>
+
+</body>
+</html>
